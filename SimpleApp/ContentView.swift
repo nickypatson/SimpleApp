@@ -8,73 +8,90 @@
 import SwiftUI
 import CoreData
 
+// MARK: - ContentView
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    
+    @Environment(\.managedObjectContext) var managedObjectContext
+    @ObservedObject var viewModel: HomeViewModel
+    
+    @FetchRequest(entity: Sensor.entity(),
+                  sortDescriptors: [NSSortDescriptor(keyPath: \Sensor.sensorName, ascending: true)])
+    var sensors: FetchedResults<Sensor>
+    
+    @FetchRequest(entity: Vehicle.entity(),
+                  sortDescriptors: [NSSortDescriptor(keyPath: \Vehicle.vehicleId, ascending: true)])
+    var vehicle: FetchedResults<Vehicle>
+    
+    @State var selectedSensor : Sensor?
+    @State var isPresented = false
+    
     var body: some View {
-        List {
-            ForEach(items) { item in
-                Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-            }
-            .onDelete(perform: deleteItems)
-        }
-        .toolbar {
-            #if os(iOS)
-            EditButton()
-            #endif
 
-            Button(action: addItem) {
-                Label("Add Item", systemImage: "plus")
+        NavigationView {
+            List {
+                ForEach(sensors, id: \.self) { sensor in
+                    
+                    SensorRow(onComplete: { selectedsensor in
+                        viewModel.saveContext()
+                    }, sensor: sensor)
+                }
+                .onDelete(perform: deleteSensor)
             }
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+            .navigationBarTitle(Text(vehicle.first?.name ?? ""))
+            .toolbar {
+                Button("Reload From JSON") {
+                    viewModel.deleteAllValues()
+                }
             }
+        }.onAppear{
+            viewModel.loadValues()
         }
     }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+    
+    /// Action to delete sensor data
+    private func deleteSensor(at offsets: IndexSet) {
+        offsets.forEach { index in
+            let sensors = self.sensors[index]
+            self.viewModel.deleteSensor(sensor: sensors)
         }
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+// MARK: - SensorRow
+struct SensorRow: View {
+    
+    @State var isPresented = false
+    let onComplete: (Sensor) -> Void
+    var sensor: Sensor
+    
+    var body: some View {
+        
+        VStack(alignment: .leading) {
+            
+            HStack{
+                Text("Sensor Name:")
+                Text(sensor.sensorName)
+                    .font(.caption)
+            }
+            HStack{
+                Text("Mac Address:")
+                Text(sensor.macAddress)
+                    .font(.caption)
+            }
+            HStack{
+                Text("Sensor type:")
+                Text(sensor.state.rawValue)
+                    .font(.caption)
+            }
+        }.onTapGesture {
+            self.isPresented = true
+        }
+        .sheet(isPresented: $isPresented) {
+            
+            SensorDetails(sensor: sensor) { (sensor) in
+                self.onComplete(sensor)
+                self.isPresented = false
+            }
+        }
     }
 }

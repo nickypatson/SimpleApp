@@ -13,8 +13,8 @@ struct SimpleAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            let context = persistenceController.container.viewContext
+            ContentView(viewModel: HomeViewModel(managedObjectContext: context)).environment(\.managedObjectContext, context)
         }
     }
 }
